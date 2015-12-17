@@ -1,0 +1,94 @@
+---
+title: "MachineLearning-Coursera"
+author: "Ryan Greenway"
+date: "December 17, 2015"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+
+# Executive Summary
+This paper describes using data from wearable devices and machine learning techniques to predict "How well" someone performs an exercise. We used the Random Forest approach to build our model, and were able to predict with an accuracy of 99.29%.  The data comes from the "Qualitative Activity Recognition of Weight Lifting Exercises".  The data includes 6 subjects performing activities in 4 distinct 'incorrect' ways and one correct way.  Our method was to take the 19K+ training data set and subset to test and training for cross-validation of our model.  Then, we removed any rows with "NA" values since we are using a Random Forest Approach which won't accept NAs.  In Conclusion, we are able to predict how well people perform activities or exercises based on variations in wearable device data.
+
+An additional note: this algorithm was further tested on a small data set of 20 rows and classified all 20 correctly.
+
+Citation:
+Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz3ubijLD6V
+
+# Step 1: Load the Data and prep for analysis
+We'll load both the training and test data sets but only manipulate the training data.  Test data will be held out for the submission (my algorithm performed 20 out of 20 correct in that assignment).
+
+
+```{r, message=FALSE, warning=FALSE}
+  ## Libraries
+  library(ggplot2)
+  library(caret)
+  library(randomForest)
+
+  setwd("C:/Users/Ramos/Documents/R/MachineLearning") #set working directory
+
+  ## Download Training and Test (hold-out) Data Sets
+    #urlTrain <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+    #urlTest <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+    urlTrain <- "pml-training.csv" ## Moved to local drive for speed
+    urlTest <- "pml-testing.csv"   ## Moved to local drive for speed
+  ## Read data into R dataframe
+    dataTrain <- read.table(urlTrain, sep=",",header=TRUE,as.is=T)
+    dataTest <- read.table(urlTest, sep=",",header=TRUE,as.is=T)
+
+  ## Preprocess data in preparation for Random Forest ML
+    #head(dataTrain) #Notice that the first 6 columns aren't useful (time, names, etc.)
+    dataTrain <- dataTrain[,8:160] #remove first 6 columns
+    dataTrain[, 1:152] <- sapply(dataTrain[, 1:152], as.numeric) #convert to numeric
+    dataTrain[,153] <- as.factor(dataTrain[,153]) #make 'classe' a factor
+    dataTrain<-dataTrain[,colSums(is.na(dataTrain)) == 0] #remove all columns with 'NA'
+```
+
+# Step 2: Split data into training and test for cross-validation
+We need to hold out data for validating our model after it's built.  This will split the 'training' dataset into a 60% training and 40% test sets.
+
+```{r}
+  ## Set random number seed for repeatability
+    set.seed(32323)
+
+  ## Split Training set into training/test for cross-validation; Random Sampling
+    inTrain <- createDataPartition(y=dataTrain$classe,p=.6,list=FALSE)
+    training <- dataTrain[inTrain,]
+    testing <- dataTrain[-inTrain,]
+```
+
+
+# Step 3: Exploratory Data Analysis
+We'll make a few plots of several variables and also look into the remaining variables; only on the training subset.
+
+```{r, eval=FALSE}
+  summary(training)
+```
+
+```{r, echo=FALSE}
+  featurePlot(x=training[,c("yaw_belt","roll_belt","magnet_dumbbell_z","pitch_forearm","pitch_belt")],y=training$classe,plot="pairs")
+```
+
+From these plots you can see groupings of the various class categories (different colors on the graphs).  We will look for these variables in the final model.
+
+# Step 4: Apply Random Forest in Model Creation
+I'm using the RandomForest package and limiting to 500 trees in our machine learning. We are using only 500 trees due to the width of our training data -- 52 variables.
+We'll also look at the most important variables in the results.
+
+```{r}
+  ## Modeling using Random Forests; Also selects features
+    fit <- randomForest(classe ~ ., data=training, importance=TRUE, ntree=500)
+    varImpPlot(fit) # List important variables
+```
+
+# Step 5: Evaluate the Model
+You'll see below that the OOB estimate of the error rate is very low at 0.71%. This corresponds to the prediction on the test data as well.
+```{r}
+    print(fit)
+    predTest <- predict(fit,testing)
+    table(predTest,testing$classe)
+```
